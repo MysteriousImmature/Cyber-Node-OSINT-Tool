@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Node Pro | OSINT Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        soc: {
+                            bg: '#05070a',
+                            panel: '#0d1117',
+                            border: '#1f2937',
+                            accent: '#3b82f6',
+                            emerald: '#10b981',
+                            danger: '#ef4444',
+                            warning: '#f59e0b',
+                            text: '#c9d1d9'
+                        }
+                    },
+                    borderRadius: { 'soc': '8px' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #05070a; color: #c9d1d9; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
+        .glass-panel { 
+            background: rgba(13, 17, 23, 0.7); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+        .glow-accent { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+        .glow-danger { box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+        
+        @keyframes scan-line {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(400px); }
+        }
+        .scanning-overlay {
+            position: absolute; inset: 0; pointer-events: none; overflow: hidden; opacity: 0;
+        }
+        .is-scanning .scanning-overlay { opacity: 1; }
+        .scanning-bar {
+            width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            animation: scan-line 2s infinite linear;
+        }
+        
+        .intel-card { transition: all 0.2s ease; border: 1px solid #1f2937; }
+        .intel-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <div id="auth-overlay" class="fixed inset-0 z-[999] bg-soc-bg/95 backdrop-blur-md flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="glass-panel p-10 rounded-xl flex flex-col items-center gap-6 max-w-sm w-full relative overflow-hidden">
+            <div class="scanning-overlay is-scanning"><div class="scanning-bar"></div></div>
+            <div class="relative z-10 w-full flex flex-col items-center gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-soc-accent/10 rounded-lg flex items-center justify-center border border-soc-accent/30 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                        <i data-lucide="lock" class="text-soc-accent w-6 h-6"></i>
+                    </div>
+                    <h2 class="text-lg font-black tracking-widest uppercase text-white">System Lock</h2>
+                </div>
+                <input type="password" id="auth-pass" placeholder="Enter Passkey..." class="w-full bg-black/50 border-2 border-soc-border rounded-xl py-3 px-4 text-white text-center text-lg focus:outline-none focus:border-soc-accent/60 focus:ring-4 focus:ring-soc-accent/10 font-mono transition-all">
+                <button id="auth-submit" class="w-full bg-soc-accent hover:bg-blue-500 py-3 rounded-xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-[0_0_20px_rgba(59,130,246,0.4)]">Unlock Node</button>
+                <div id="auth-error" class="hidden text-soc-danger text-xs font-bold uppercase tracking-widest drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">Access Denied</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_CONFIG = {
+              VIRUSTOTAL_API_KEY: 'Redacted',
+              HYBRID_ANALYSIS_API_KEY: 'Redacted',
+              ALIENVAULT_OTX_API_KEY: 'Redacted',
+              USE_PROXY: true 
+        };
+        const PROXY_URL = "https://cors-anywhere.herokuapp.com/"; 
+    </script>
+
+   <nav class="h-14 border-b border-soc-border glass-panel sticky top-0 z-[100] px-6 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 bg-soc-accent/10 rounded-lg flex items-center justify-center border border-soc-accent/30">
+                <i data-lucide="shield-half" class="text-soc-accent w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-black tracking-widest uppercase">CyberNode <span class="text-soc-accent">v2.0</span></h1>
+                <p class="text-[9px] text-gray-500 font-mono leading-none uppercase">Advanced Threat Intelligence</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <div class="hidden md:flex items-center gap-4 border-r border-soc-border pr-6">
+                <a href="index.html" class="text-[10px] font-black uppercase tracking-widest text-soc-accent flex items-center gap-2">
+                    <i data-lucide="terminal" class="w-3.5 h-3.5"></i> Terminal
+                </a>
+                <a href="Email Analysis/Email_Analysis.html" class="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors flex items-center gap-2">
+                    <i data-lucide="mail" class="w-3.5 h-3.5"></i> Email Analysis
+                </a>
+            </div>
+
+            <div class="flex items-center gap-4 lg:gap-8">
+                <div class="flex items-center gap-2">
+                    <div id="clock" class="text-[10px] font-mono text-soc-accent/70 bg-soc-accent/5 px-3 py-1 rounded border border-soc-accent/10">00:00:00 UTC</div>
+                    <button id="system-refresh" title="Clear Results" class="p-1.5 hover:bg-white/5 rounded-md border border-white/5 text-gray-500 hover:text-soc-accent transition-all active:scale-90">
+                        <i data-lucide="refresh-ccw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="proxy-status" class="text-[9px] font-bold text-soc-emerald uppercase tracking-tighter">Bridge Active</span>
+                    <button id="proxy-toggle" class="w-10 h-5 bg-soc-emerald rounded-full relative transition-all glow-accent">
+                        <div class="absolute top-1 left-5 w-3 h-3 bg-white rounded-full transition-all"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 lg:p-10 max-w-[1600px] mx-auto w-full flex flex-col gap-8">
+        
+        <section id="terminal" class="glass-panel rounded-xl p-8 lg:p-12 relative overflow-hidden group shrink-0">
+            <div class="scanning-overlay"><div class="scanning-bar"></div></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 bg-soc-accent rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span>
+                        <h2 class="text-sm font-bold uppercase tracking-widest text-gray-400">Target Acquisition</h2>
+                    </div>
+                    <div id="type-badge" class="px-4 py-2 bg-soc-accent/10 border border-soc-accent/30 rounded-lg text-xs font-bold text-soc-accent hidden uppercase tracking-widest">Initializing...</div>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-6">
+                    <div class="relative flex-1 group">
+                        <i data-lucide="terminal" class="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-500 group-focus-within:text-soc-accent transition-colors"></i>
+                        <input type="text" id="ioc-input" spellcheck="false" autocomplete="off"
+                               placeholder="Input Hash, IP address, or Domain..." 
+                               class="w-full bg-black/50 border-2 border-soc-border rounded-xl py-5 pl-16 pr-6 text-white text-lg placeholder:text-gray-600 focus:outline-none focus:border-soc-accent/60 focus:ring-4 focus:ring-soc-accent/10 font-mono transition-all shadow-inner">
+                    </div>
+                    <button id="scan-btn" class="bg-soc-accent hover:bg-blue-500 px-12 py-5 rounded-xl font-black text-sm md:text-base uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:shadow-[0_0_30px_rgba(59,130,246,0.6)]">
+                        Execute <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 flex-1 min-h-[400px]">
+            
+            <div class="intel-card glass-panel rounded-xl flex flex-col overflow-hidden">
+                <div class="p-5 border-b border-soc-border flex items-center justify-between bg-black/20">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="search" class="w-5 h-5 text-soc-accent"></i>
+                        <span class="text-xs font-black uppercase tracking-widest text-gray-300">VirusTotal</span>
+                    </div>
+                    <div id="vt-link-container"></div>
+                </div>
+                <div id="vt-results" class="p-8 flex-1 flex flex-col justify-center text-center italic text-sm text-gray-600 font-mono bg-gradient-to-b from-transparent to-black/10">Standby...</div>
+            </div>
+
+            <div class="intel-card glass-panel rounded-xl flex flex-col overflow-hidden">
+                <div class="p-5 border-b border-soc-border flex items-center justify-between bg-black/20">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="map" class="w-5 h-5 text-soc-emerald"></i>
+                        <span class="text-xs font-black uppercase tracking-widest text-gray-300">OTX AlienVault</span>
+                    </div>
+                    <div id="otx-link-container"></div>
+                </div>
+                <div id="otx-results" class="p-8 flex-1 flex flex-col justify-center text-center italic text-sm text-gray-600 font-mono bg-gradient-to-b from-transparent to-black/10">Standby...</div>
+            </div>
+
+            <div class="intel-card glass-panel rounded-xl flex flex-col overflow-hidden">
+                <div class="p-5 border-b border-soc-border flex items-center justify-between bg-black/20">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="flask-conical" class="w-5 h-5 text-soc-warning"></i>
+                        <span class="text-xs font-black uppercase tracking-widest text-gray-300">Hybrid Analysis</span>
+                    </div>
+                    <div id="ha-link-container"></div>
+                </div>
+                <div id="ha-results" class="p-8 flex-1 flex flex-col justify-center text-center italic text-sm text-gray-600 font-mono bg-gradient-to-b from-transparent to-black/10">Standby...</div>
+            </div>
+
+            <div class="intel-card glass-panel rounded-xl flex flex-col overflow-hidden">
+                <div class="p-5 border-b border-soc-border flex items-center justify-between bg-black/20">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="database" class="w-5 h-5 text-soc-danger"></i>
+                        <span class="text-xs font-black uppercase tracking-widest text-gray-300">ThreatFox</span>
+                    </div>
+                    <div id="tf-link-container"></div>
+                </div>
+                <div id="tf-results" class="p-8 flex-1 flex flex-col justify-center text-center italic text-sm text-gray-600 font-mono bg-gradient-to-b from-transparent to-black/10">Standby...</div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // --- PERSISTENCE & AUTH LOGIC ---
+        const _0x1a2 = "QW5vbnltb3Vz"; 
+        const authOverlay = document.getElementById('auth-overlay');
+        const authInput = document.getElementById('auth-pass');
+        const authSubmit = document.getElementById('auth-submit');
+        const authError = document.getElementById('auth-error');
+        const refreshBtn = document.getElementById('system-refresh');
+
+        function checkSession() {
+            if (localStorage.getItem('cybernode_session') === 'active') {
+                authOverlay.style.display = 'none';
+                loadSavedData();
+            }
+        }
+
+        function unlockSystem() {
+            if(btoa(authInput.value) === _0x1a2) {
+                localStorage.setItem('cybernode_session', 'active');
+                authOverlay.style.opacity = '0';
+                setTimeout(() => authOverlay.remove(), 500);
+            } else {
+                authError.classList.remove('hidden');
+                authInput.value = '';
+                setTimeout(() => authError.classList.add('hidden'), 2000);
+            }
+        }
+
+        function softReset() {
+            // Clears UI and local results but keeps session
+            input.value = '';
+            badge.classList.add('hidden');
+            const placeholders = ['vt', 'otx', 'ha', 'tf'];
+            placeholders.forEach(id => {
+                document.getElementById(`${id}-results`).innerHTML = 'Standby...';
+                document.getElementById(`${id}-link-container`).innerHTML = '';
+            });
+            localStorage.removeItem('cybernode_last_results');
+            localStorage.removeItem('cybernode_last_ioc');
+        }
+
+        function saveData() {
+            const data = {
+                vt: document.getElementById('vt-results').innerHTML,
+                otx: document.getElementById('otx-results').innerHTML,
+                ha: document.getElementById('ha-results').innerHTML,
+                tf: document.getElementById('tf-results').innerHTML,
+                vtLink: document.getElementById('vt-link-container').innerHTML,
+                otxLink: document.getElementById('otx-link-container').innerHTML,
+                haLink: document.getElementById('ha-link-container').innerHTML,
+                tfLink: document.getElementById('tf-link-container').innerHTML,
+                ioc: input.value
+            };
+            localStorage.setItem('cybernode_last_results', JSON.stringify(data));
+        }
+
+        function loadSavedData() {
+            const saved = localStorage.getItem('cybernode_last_results');
+            if (saved) {
+                const data = JSON.parse(saved);
+                document.getElementById('vt-results').innerHTML = data.vt;
+                document.getElementById('otx-results').innerHTML = data.otx;
+                document.getElementById('ha-results').innerHTML = data.ha;
+                document.getElementById('tf-results').innerHTML = data.tf;
+                document.getElementById('vt-link-container').innerHTML = data.vtLink;
+                document.getElementById('otx-link-container').innerHTML = data.otxLink;
+                document.getElementById('ha-link-container').innerHTML = data.haLink;
+                document.getElementById('tf-link-container').innerHTML = data.tfLink;
+                input.value = data.ioc || '';
+                lucide.createIcons();
+            }
+        }
+
+        authSubmit.addEventListener('click', unlockSystem);
+        authInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') unlockSystem(); });
+        refreshBtn.addEventListener('click', softReset);
+        
+        window.onload = checkSession;
+
+        // --------------------------------
+
+        setInterval(() => {
+            document.getElementById('clock').textContent = new Date().toISOString().replace('T',' ').split('.')[0] + ' UTC';
+        }, 1000);
+
+        const input = document.getElementById('ioc-input');
+        const badge = document.getElementById('type-badge');
+        const btn = document.getElementById('scan-btn');
+        const proxyBtn = document.getElementById('proxy-toggle');
+        const proxyStatus = document.getElementById('proxy-status');
+        const terminal = document.getElementById('terminal');
+
+        proxyBtn.addEventListener('click', () => {
+            API_CONFIG.USE_PROXY = !API_CONFIG.USE_PROXY;
+            const toggleDot = proxyBtn.querySelector('div');
+            if (API_CONFIG.USE_PROXY) {
+                proxyBtn.classList.replace('bg-gray-700', 'bg-soc-emerald');
+                toggleDot.style.left = '1.25rem';
+                proxyStatus.textContent = 'Bridge Active';
+                proxyStatus.className = 'text-[9px] font-bold text-soc-emerald uppercase tracking-tighter';
+            } else {
+                proxyBtn.classList.replace('bg-soc-emerald', 'bg-gray-700');
+                toggleDot.style.left = '0.25rem';
+                proxyStatus.textContent = 'Direct Mode';
+                proxyStatus.className = 'text-[9px] font-bold text-gray-500 uppercase tracking-tighter';
+            }
+        });
+
+        const regex = {
+            IP: /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/,
+            HASH: /^[a-fA-F0-9]{32,64}$/,
+            DOMAIN: /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i
+        };
+
+        input.addEventListener('input', () => {
+            const val = input.value.trim();
+            badge.classList.remove('hidden');
+            if (regex.IP.test(val)) badge.textContent = 'IPv4 Indicator';
+            else if (regex.HASH.test(val)) badge.textContent = 'Hash Indicator';
+            else if (regex.DOMAIN.test(val)) badge.textContent = 'Domain Indicator';
+            else badge.classList.add('hidden');
+        });
+
+        function getDeepLinks(ioc, type) {
+            const links = { vt: '', otx: '', ha: '', tf: '' };
+            const cleanType = type.split(' ')[0];
+
+            if (cleanType === 'IPv4') links.vt = `https://www.virustotal.com/gui/ip-address/${ioc}`;
+            else if (cleanType === 'Domain') links.vt = `https://www.virustotal.com/gui/domain/${ioc}`;
+            else if (cleanType === 'Hash') links.vt = `https://www.virustotal.com/gui/file/${ioc}`;
+
+            if (cleanType === 'IPv4') links.otx = `https://otx.alienvault.com/indicator/ip/${ioc}`;
+            else if (cleanType === 'Domain') links.otx = `https://otx.alienvault.com/indicator/domain/${ioc}`;
+            else if (cleanType === 'Hash') links.otx = `https://otx.alienvault.com/indicator/file/${ioc}`;
+
+            links.ha = `https://www.hybrid-analysis.com/search?query=${ioc}`;
+            links.tf = `https://threatfox.abuse.ch/browse.php?search=ioc%3A${ioc}`;
+            return links;
+        }
+
+        function renderLink(containerId, url) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `
+                <a href="${url}" target="_blank" class="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 hover:border-soc-accent hover:text-soc-accent transition-all text-gray-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:scale-105">
+                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                </a>
+            `;
+            lucide.createIcons();
+        }
+
+        async function runScan() {
+            const ioc = input.value.trim();
+            const type = badge.textContent;
+            if (!ioc) return;
+
+            terminal.classList.add('is-scanning');
+            btn.disabled = true;
+
+            const links = getDeepLinks(ioc, type);
+            renderLink('vt-link-container', links.vt);
+            renderLink('otx-link-container', links.otx);
+            renderLink('ha-link-container', links.ha);
+            renderLink('tf-link-container', links.tf);
+
+            document.querySelectorAll('[id$="-results"]').forEach(el => {
+                el.innerHTML = '<div class="flex flex-col items-center justify-center gap-4 h-full"><div class="w-8 h-8 border-4 border-soc-accent border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div><span class="text-xs font-bold uppercase tracking-widest text-soc-accent animate-pulse">Querying Intel...</span></div>';
+            });
+
+            const vtTask = fetchIntel('VT', `https://www.virustotal.com/api/v3/search?query=${ioc}`, { 'x-apikey': API_CONFIG.VIRUSTOTAL_API_KEY });
+            
+            let otxEndpoint = `https://otx.alienvault.com/api/v1/indicators/IPv4/${ioc}/general`;
+            if (type.includes('Domain')) otxEndpoint = `https://otx.alienvault.com/api/v1/indicators/domain/${ioc}/general`;
+            if (type.includes('Hash')) otxEndpoint = `https://otx.alienvault.com/api/v1/indicators/file/${ioc}/general`;
+            const otxTask = fetchIntel('OTX', otxEndpoint, { 'X-OTX-API-KEY': API_CONFIG.ALIENVAULT_OTX_API_KEY });
+
+            const haTask = fetchIntel('HA', `https://www.hybrid-analysis.com/api/v2/search/terms?term=${ioc}`, { 'api-key': API_CONFIG.HYBRID_ANALYSIS_API_KEY, 'user-agent': 'Falcon Sandbox' });
+            const tfTask = fetchIntel('TF', 'https://threatfox-api.abuse.ch/api/v1/', {}, 'POST', { query: "search_ioc", search_term: ioc });
+
+            const [vt, otx, ha, tf] = await Promise.all([vtTask, otxTask, haTask, tfTask]);
+
+            renderVT(vt);
+            renderOTX(otx);
+            renderHA(ha);
+            renderTF(tf);
+            
+            saveData(); // Persist results after render
+            terminal.classList.remove('is-scanning');
+            btn.disabled = false;
+        }
+
+        async function fetchIntel(id, url, headers = {}, method = 'GET', body = null) {
+            const finalUrl = API_CONFIG.USE_PROXY ? PROXY_URL + url : url;
+            try {
+                const options = { method, headers: { 'Accept': 'application/json', ...headers } };
+                if (body) options.body = JSON.stringify(body);
+                const res = await fetch(finalUrl, options);
+                if (res.status === 403 && API_CONFIG.USE_PROXY) return { error: 'PROXY_AUTH' };
+                if (!res.ok) return { error: `HTTP_${res.status}` };
+                return await res.json();
+            } catch (e) {
+                return { error: 'CORS_BLOCK' };
+            }
+        }
+
+        function errorUI(err) {
+            if (err === 'CORS_BLOCK' || err === 'PROXY_AUTH') {
+                return `
+                <div class="flex flex-col items-center justify-center h-full space-y-4">
+                    <div class="text-soc-warning text-sm font-black uppercase tracking-widest drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">Bridge Auth Required</div>
+                    <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" class="px-6 py-3 bg-soc-accent text-white text-xs font-black tracking-widest rounded-lg block hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/30">REQUEST ACCESS</a>
+                </div>`;
+            }
+            return `<div class="flex items-center justify-center h-full"><span class="text-soc-danger font-mono text-xs uppercase tracking-widest bg-soc-danger/10 px-4 py-2 rounded border border-soc-danger/30">${err}</span></div>`;
+        }
+
+        function renderVT(res) {
+            const el = document.getElementById('vt-results');
+            if (res.error) { el.innerHTML = errorUI(res.error); return; }
+            const stats = res.data?.[0]?.attributes?.last_analysis_stats || res.data?.attributes?.last_analysis_stats;
+            if (!stats) { el.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 uppercase tracking-widest text-xs font-bold">Record Absent</div>'; return; }
+            const isDanger = stats.malicious > 0;
+            el.innerHTML = `
+                <div class="w-full h-full flex flex-col justify-center space-y-6 px-2">
+                    <div class="flex items-end justify-between"><span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Malicious Hits</span><span class="${isDanger ? 'text-soc-danger drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]' : 'text-soc-emerald'} font-black text-5xl lg:text-6xl">${stats.malicious}</span></div>
+                    <div class="h-3 bg-black/50 border border-white/5 rounded-full overflow-hidden shadow-inner"><div class="h-full ${isDanger ? 'bg-soc-danger' : 'bg-soc-emerald'} transition-all duration-1000 ease-out" style="width: ${Math.max(2, Math.min(100, (stats.malicious/70)*100))}%"></div></div>
+                    <div class="flex justify-between text-xs lg:text-sm text-gray-400 font-mono uppercase font-bold bg-black/30 p-4 rounded-lg border border-white/5">
+                        <span class="text-soc-warning">Susp: ${stats.suspicious}</span>
+                        <span class="text-soc-emerald">Safe: ${stats.harmless}</span>
+                    </div>
+                </div>`;
+        }
+
+        function renderOTX(res) {
+            const el = document.getElementById('otx-results');
+            if (res.error) { el.innerHTML = errorUI(res.error); return; }
+            const count = res.pulse_info?.count || 0;
+            const hasPulses = count > 0;
+            el.innerHTML = `
+                <div class="w-full h-full flex flex-col items-center justify-center space-y-5 px-2">
+                    <div class="text-7xl lg:text-8xl font-black ${hasPulses ? 'text-soc-emerald drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'text-gray-700'}">${count}</div>
+                    <div class="text-xs font-bold uppercase tracking-widest ${hasPulses ? 'text-gray-300' : 'text-gray-600'}">Active Pulses</div>
+                    <div class="text-sm text-gray-400 bg-black/40 px-5 py-3 rounded-lg font-mono truncate max-w-full border border-white/10 ${hasPulses ? 'border-soc-emerald/30 text-soc-emerald' : ''}">${res.tags?.[0] || 'Clean Tag'}</div>
+                </div>`;
+        }
+
+        function renderHA(res) {
+            const el = document.getElementById('ha-results');
+            if (res.error) { el.innerHTML = errorUI(res.error); return; }
+            const list = Array.isArray(res) ? res : (res.result || []);
+            const hit = list[0];
+            if (!hit) { el.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 uppercase tracking-widest text-xs font-bold">Sandbox Clean</div>'; return; }
+            const isMalicious = hit.verdict === 'malicious';
+            el.innerHTML = `
+                <div class="w-full h-full flex flex-col justify-center space-y-4 px-2">
+                    <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">Sandbox Verdict</div>
+                    <div class="text-3xl lg:text-4xl font-black uppercase ${isMalicious ? 'text-soc-danger drop-shadow-[0_0_12px_rgba(239,68,68,0.5)]' : 'text-soc-warning drop-shadow-[0_0_12px_rgba(245,158,11,0.5)]'}">${hit.verdict || 'Unknown'}</div>
+                    <div class="flex items-center justify-between mt-auto pt-6 border-t border-white/5">
+                        <span class="text-xs font-bold text-gray-500 uppercase tracking-widest">Threat Score</span>
+                        <span class="text-2xl font-mono font-bold text-white bg-black/40 px-4 py-2 rounded-lg border border-white/10">${hit.threat_score || 0}<span class="text-gray-600 text-sm">/100</span></span>
+                    </div>
+                </div>`;
+        }
+
+        function renderTF(res) {
+            const el = document.getElementById('tf-results');
+            if (res.error || res.query_status !== 'ok') { el.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 uppercase tracking-widest text-xs font-bold">Clean DB</div>'; return; }
+            const hit = res.data[0];
+            el.innerHTML = `
+                <div class="text-left w-full h-full flex flex-col justify-center space-y-4 px-2">
+                    <div class="text-soc-danger font-black text-sm lg:text-base uppercase tracking-widest drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]">${hit.threat_type_desc}</div>
+                    <div class="text-sm lg:text-lg text-gray-300 font-mono line-clamp-3 bg-black/40 p-4 rounded-lg border border-white/10 shadow-inner">${hit.malware_printable}</div>
+                    <div class="text-[10px] lg:text-xs text-gray-500 mt-2 uppercase tracking-widest font-bold pt-4 border-t border-white/5">Ref: <span class="text-soc-accent ml-2">${hit.source}</span></div>
+                </div>`;
+        }
+
+        btn.addEventListener('click', runScan);
+        input.addEventListener('keydown', (e) => { if(e.key === 'Enter') runScan(); });
+    </script>
+</body>
+</html>
