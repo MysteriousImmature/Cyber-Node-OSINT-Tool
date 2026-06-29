@@ -8,8 +8,7 @@
 
 The terminal is deployed and accessible at the following nodes:
 
-* **[Main Production Node](https://cyber-node-pro.netlify.app/)**
-* **[Alternative Mirror Node](https://mysteriousimmature.github.io/Cyber-Node-OSINT-Tool/)**
+* **[Main Production Node](https://demo.com)**
 
 ---
 
